@@ -1,27 +1,122 @@
-<div id="player-container" style="display:none; margin-top:20px;">
-    <video id="player" playsinline controls style="width:100%; max-width:800px; margin:0 auto;"></video>
-</div>
-
-<script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
-<link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-
-<script>
-    const player = new Plyr('#player');
-
-    async function playMovie(id, title) {
-        const res = await fetch(`/api/links?id=${id}&title=${title}`);
-        const sources = await res.json();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetMirror Web Player</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: white; margin: 0; padding: 20px; text-align: center; }
+        .search-box { margin: 30px 0; }
+        input { padding: 12px; width: 300px; border-radius: 25px; border: none; outline: none; font-size: 16px; }
+        button { padding: 12px 25px; border-radius: 25px; border: none; background: #e50914; color: white; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #b20710; }
         
-        if(sources.length > 0) {
-            document.getElementById('player-container').style.display = 'block';
-            const videoLink = sources[0].file;
-            
-            // HLS (m3u8) play karne ke liye
-            if (videoLink.includes('.m3u8')) {
-                alert("M3U8 link mila! Browser mein play karne ke liye HLS.js chahiye.");
-                // Filhaal direct link console mein print kar rahe hain
-                console.log("Video Link:", videoLink);
+        #player-container { max-width: 900px; margin: 20px auto; display: none; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; margin-top: 30px; }
+        .card { background: #1f1f1f; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(229, 9, 20, 0.4); }
+        .card img { width: 100%; height: 230px; object-fit: cover; }
+        .card p { font-size: 14px; padding: 10px; margin: 0; font-weight: 500; }
+        
+        #status { margin: 10px; color: #aaa; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <h1>NetMirror <span style="color: #e50914;">Web</span></h1>
+
+    <div class="search-box">
+        <input type="text" id="query" placeholder="Movie ya Show ka naam...">
+        <button onclick="searchMovies()">Dhundho</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div id="player-container">
+        <video id="player" playsinline controls></video>
+    </div>
+
+    <div class="results" id="output"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+
+    <script>
+        const video = document.getElementById('player');
+        const playerContainer = document.getElementById('player-container');
+        const status = document.getElementById('status');
+        
+        // Initialize Plyr
+        const player = new Plyr(video);
+
+        async function searchMovies() {
+            const q = document.getElementById('query').value;
+            if(!q) return;
+
+            status.innerText = "Dhundh raha hoon...";
+            document.getElementById('output').innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                status.innerText = "";
+
+                if(data.length === 0) {
+                    status.innerText = "Kuch nahi mila!";
+                    return;
+                }
+
+                data.forEach(movie => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <img src="${movie.image}" onerror="this.src='https://via.placeholder.com/160x230?text=No+Poster'">
+                        <p>${movie.title}</p>
+                    `;
+                    card.onclick = () => playMovie(movie.id, movie.title);
+                    document.getElementById('output').appendChild(card);
+                });
+            } catch (err) {
+                status.innerText = "Search error!";
             }
         }
-    }
-</script>
+
+        async function playMovie(id, title) {
+            status.innerText = "Video link nikaal raha hoon...";
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            try {
+                const res = await fetch(`/api/links?id=${id}&title=${encodeURIComponent(title)}`);
+                const sources = await res.json();
+
+                if(!sources || sources.length === 0) {
+                    alert("Video link nahi mila!");
+                    status.innerText = "";
+                    return;
+                }
+
+                const sourceUrl = sources[0].file;
+                playerContainer.style.display = 'block';
+                status.innerText = "Playing: " + title;
+
+                // Logic to handle M3U8 with HLS.js
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(sourceUrl);
+                    hls.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // For Safari
+                    video.src = sourceUrl;
+                }
+                
+                player.play();
+            } catch (err) {
+                alert("Playback error!");
+                status.innerText = "";
+            }
+        }
+    </script>
+</body>
+</html>
