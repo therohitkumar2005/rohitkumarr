@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playing Now - NetMirror</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <style>
+        body { background: #000; color: #fff; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
+        #player-container { width: 90%; max-width: 1000px; border: 1px solid #333; border-radius: 10px; overflow: hidden; }
+        .back-btn { position: absolute; top: 20px; left: 20px; background: #e50914; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; text-decoration: none; font-weight: bold; }
+        h2 { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="back-btn">← Back</a>
+
+    <div id="player-container">
+        <video id="video" playsinline controls></video>
+    </div>
+
+    <h2 id="movieTitle">Loading movie details...</h2>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const player = new Plyr(video);
+        
+        // URL se ID, Title aur OTT type nikaalna
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+        const title = urlParams.get('title');
+        const ott = urlParams.get('ott');
+
+        document.getElementById('movieTitle').innerText = `Playing: ${title} (${ott.toUpperCase()})`;
+
+        async function startPlayback() {
+            try {
+                // Backend API se link fetch karna
+                const res = await fetch(`/api/links?id=${id}&title=${encodeURIComponent(title)}&ott=${ott}`);
+                const sources = await res.json();
+
+                if(!sources || sources.length === 0) {
+                    alert("Video link nahi mila!");
+                    return;
+                }
+
+                const streamUrl = sources[0].file;
+
+                // HLS playback logic
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(streamUrl);
+                    hls.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = streamUrl;
+                }
+                
+                video.play();
+            } catch (err) {
+                alert("Player error!");
+            }
+        }
+
+        if(id && title && ott) {
+            startPlayback();
+        }
+    </script>
+</body>
+</html>
