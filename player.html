@@ -1,73 +1,166 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Playing Now - NetMirror</title>
+    <title>Playing Now - NetMirror Web</title>
+    
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    
     <style>
-        body { background: #000; color: #fff; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
-        #player-container { width: 90%; max-width: 1000px; border: 1px solid #333; border-radius: 10px; overflow: hidden; }
-        .back-btn { position: absolute; top: 20px; left: 20px; background: #e50914; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; text-decoration: none; font-weight: bold; }
-        h2 { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
+        body { 
+            background: #000; 
+            color: #fff; 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Video Container Styling */
+        .player-container { 
+            width: 100%; 
+            max-width: 1000px; 
+            aspect-ratio: 16 / 9;
+            background: #000;
+            box-shadow: 0 0 50px rgba(229, 9, 20, 0.2);
+            position: relative;
+        }
+
+        video { width: 100%; height: 100%; }
+
+        /* Back Button */
+        .back-btn { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            background: rgba(229, 9, 20, 0.8); 
+            color: white; 
+            border: none; 
+            padding: 10px 25px; 
+            border-radius: 30px; 
+            cursor: pointer; 
+            text-decoration: none; 
+            font-weight: bold;
+            z-index: 10;
+            transition: 0.3s;
+        }
+        .back-btn:hover { background: #e50914; transform: scale(1.1); }
+
+        /* Movie Info Section */
+        .movie-details { 
+            margin-top: 20px; 
+            text-align: center; 
+            padding: 0 20px;
+        }
+        h2 { font-size: 1.4rem; color: #fff; margin: 5px 0; }
+        p { color: #e50914; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; }
+
+        /* Loading Spinner */
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #e50914;
+            font-size: 1.2rem;
+            z-index: 5;
+        }
     </style>
 </head>
 <body>
 
-    <a href="index.html" class="back-btn">← Back</a>
+    <a href="index.html" class="back-btn">← Back to Search</a>
 
-    <div id="player-container">
-        <video id="video" playsinline controls></video>
+    <div id="loader">Fetching video links...</div>
+
+    <div class="player-container">
+        <video id="videoPlayer" playsinline controls crossorigin></video>
     </div>
 
-    <h2 id="movieTitle">Loading movie details...</h2>
+    <div class="movie-details">
+        <p id="platformTag">Platform Loading...</p>
+        <h2 id="displayTitle">Loading Movie Title...</h2>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
     <script>
-        const video = document.getElementById('video');
-        const player = new Plyr(video);
-        
-        // URL se ID, Title aur OTT type nikaalna
-        const urlParams = new URLSearchParams(window.location.search);
-        const id = urlParams.get('id');
-        const title = urlParams.get('title');
-        const ott = urlParams.get('ott');
+        // DOM Elements
+        const video = document.getElementById('videoPlayer');
+        const loader = document.getElementById('loader');
+        const displayTitle = document.getElementById('displayTitle');
+        const platformTag = document.getElementById('platformTag');
 
-        document.getElementById('movieTitle').innerText = `Playing: ${title} (${ott.toUpperCase()})`;
+        // URL Parameters Extraction
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        const title = params.get('title');
+        const ott = params.get('ott'); // 'nf', 'pv', 'hs', 'dp'
 
-        async function startPlayback() {
+        // Initialize Plyr UI
+        const player = new Plyr(video, {
+            captions: { active: true, update: true, language: 'en' },
+            quality: { default: 1080, options: [1080, 720, 480, 360] }
+        });
+
+        // Main Playback Function
+        async function initializePlayer() {
+            if (!id || !title || !ott) {
+                alert("Zaroori info missing hai!");
+                window.location.href = "index.html";
+                return;
+            }
+
+            // Update UI with metadata
+            displayTitle.innerText = title;
+            platformTag.innerText = `${ott.toUpperCase()} MIRROR`;
+
             try {
-                // Backend API se link fetch karna
-                const res = await fetch(`/api/links?id=${id}&title=${encodeURIComponent(title)}&ott=${ott}`);
-                const sources = await res.json();
+                // Fetch direct M3U8 links from backend
+                const response = await fetch(`/api/links?id=${id}&title=${encodeURIComponent(title)}&ott=${ott}`);
+                const sources = await response.json();
 
-                if(!sources || sources.length === 0) {
-                    alert("Video link nahi mila!");
+                if (!sources || sources.length === 0) {
+                    loader.innerText = "Error: Video link nahi mila!";
                     return;
                 }
 
-                const streamUrl = sources[0].file;
+                const streamUrl = sources[0].file; // This points to /api/proxy?url=...
+                loader.style.display = 'none';
 
-                // HLS playback logic
+                // HLS logic to handle .m3u8 streaming in browser
                 if (Hls.isSupported()) {
-                    const hls = new Hls();
+                    const hls = new Hls({
+                        xhrSetup: function (xhr, url) {
+                            xhr.withCredentials = false; // Bypass basic CORS issues
+                        }
+                    });
                     hls.loadSource(streamUrl);
                     hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        video.play();
+                    });
                 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native support for Safari/iOS
                     video.src = streamUrl;
+                    video.play();
                 }
-                
-                video.play();
+
             } catch (err) {
-                alert("Player error!");
+                console.error(err);
+                loader.innerText = "Server error occurred!";
             }
         }
 
-        if(id && title && ott) {
-            startPlayback();
-        }
+        // Start the process
+        initializePlayer();
     </script>
 </body>
 </html>
