@@ -3,164 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Playing Now - NetMirror Web</title>
+    <title>NetMirror Player - Streaming Now</title>
     
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     
     <style>
         body { 
-            background: #000; 
-            color: #fff; 
-            margin: 0; 
-            padding: 0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
+            background: #000; color: #fff; margin: 0; padding: 0; 
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; height: 100vh; font-family: 'Segoe UI', sans-serif;
         }
 
-        /* Video Container Styling */
-        .player-container { 
-            width: 100%; 
-            max-width: 1000px; 
-            aspect-ratio: 16 / 9;
-            background: #000;
-            box-shadow: 0 0 50px rgba(229, 9, 20, 0.2);
-            position: relative;
+        .player-wrapper { 
+            width: 95%; max-width: 1100px; aspect-ratio: 16 / 9; 
+            background: #111; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9); position: relative;
         }
 
-        video { width: 100%; height: 100%; }
-
-        /* Back Button */
-        .back-btn { 
-            position: absolute; 
-            top: 20px; 
-            left: 20px; 
-            background: rgba(229, 9, 20, 0.8); 
-            color: white; 
-            border: none; 
-            padding: 10px 25px; 
-            border-radius: 30px; 
-            cursor: pointer; 
-            text-decoration: none; 
-            font-weight: bold;
-            z-index: 10;
-            transition: 0.3s;
+        .back-nav {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(229, 9, 20, 0.9); color: white; padding: 10px 20px;
+            border-radius: 25px; text-decoration: none; font-weight: bold; font-size: 14px;
         }
-        .back-btn:hover { background: #e50914; transform: scale(1.1); }
 
-        /* Movie Info Section */
-        .movie-details { 
-            margin-top: 20px; 
-            text-align: center; 
-            padding: 0 20px;
-        }
-        h2 { font-size: 1.4rem; color: #fff; margin: 5px 0; }
-        p { color: #e50914; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; }
+        .movie-info { margin-top: 25px; text-align: center; }
+        h2 { font-size: 1.5rem; margin: 5px 0; letter-spacing: 0.5px; }
+        .tag { color: #e50914; font-weight: bold; font-size: 12px; text-transform: uppercase; }
 
-        /* Loading Spinner */
-        #loader {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #e50914;
-            font-size: 1.2rem;
-            z-index: 5;
+        #loading-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; align-items: center; justify-content: center;
+            z-index: 5; flex-direction: column;
         }
+
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #333;
+            border-top: 4px solid #e50914; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <a href="index.html" class="back-btn">← Back to Search</a>
+    <a href="index.html" class="back-nav">← Back to Home</a>
 
-    <div id="loader">Fetching video links...</div>
-
-    <div class="player-container">
+    <div class="player-wrapper">
+        <div id="loading-overlay">
+            <div class="spinner"></div>
+            <p id="status-text">Fetching secure video links...</p>
+        </div>
+        
         <video id="videoPlayer" playsinline controls crossorigin></video>
     </div>
 
-    <div class="movie-details">
-        <p id="platformTag">Platform Loading...</p>
-        <h2 id="displayTitle">Loading Movie Title...</h2>
+    <div class="movie-info">
+        <div class="tag" id="platformDisplay">Mirror</div>
+        <h2 id="titleDisplay">Movie Title</h2>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
     <script>
-        // DOM Elements
         const video = document.getElementById('videoPlayer');
-        const loader = document.getElementById('loader');
-        const displayTitle = document.getElementById('displayTitle');
-        const platformTag = document.getElementById('platformTag');
+        const overlay = document.getElementById('loading-overlay');
+        const statusText = document.getElementById('status-text');
 
-        // URL Parameters Extraction
+        // URL parameters
         const params = new URLSearchParams(window.location.search);
-        const id = params.get('id');
-        const title = params.get('title');
-        const ott = params.get('ott'); // 'nf', 'pv', 'hs', 'dp'
+        const movieID = params.get('id');
+        const movieTitle = params.get('title');
+        const ottType = params.get('ott') || 'nf';
 
-        // Initialize Plyr UI
+        // Update UI
+        document.getElementById('titleDisplay').innerText = movieTitle || "Unknown";
+        document.getElementById('platformDisplay').innerText = ottType.toUpperCase() + " MIRROR";
+
+        // Initialize Plyr
         const player = new Plyr(video, {
-            captions: { active: true, update: true, language: 'en' },
-            quality: { default: 1080, options: [1080, 720, 480, 360] }
+            quality: { default: 1080, options: [1080, 720, 480] }
         });
 
-        // Main Playback Function
-        async function initializePlayer() {
-            if (!id || !title || !ott) {
-                alert("Zaroori info missing hai!");
-                window.location.href = "index.html";
+        async function startPlayback() {
+            if (!movieID || !movieTitle) {
+                statusText.innerText = "Error: Invalid Movie Data";
                 return;
             }
 
-            // Update UI with metadata
-            displayTitle.innerText = title;
-            platformTag.innerText = `${ott.toUpperCase()} MIRROR`;
-
             try {
-                // Fetch direct M3U8 links from backend
-                const response = await fetch(`/api/links?id=${id}&title=${encodeURIComponent(title)}&ott=${ott}`);
+                // Fetch links from backend
+                const response = await fetch(`/api/links?id=${movieID}&title=${encodeURIComponent(movieTitle)}&ott=${ottType}`);
                 const sources = await response.json();
 
-                if (!sources || sources.length === 0) {
-                    loader.innerText = "Error: Video link nahi mila!";
+                // FIX: Check if sources exists and has items before reading
+                if (!sources || !Array.isArray(sources) || sources.length === 0) {
+                    statusText.innerText = "Error: Video link not found. The server might be busy.";
                     return;
                 }
 
-                const streamUrl = sources[0].file; // This points to /api/proxy?url=...
-                loader.style.display = 'none';
+                overlay.style.display = 'none';
+                const streamUrl = sources[0].file; // Safe access now
 
-                // HLS logic to handle .m3u8 streaming in browser
+                // HLS logic
                 if (Hls.isSupported()) {
                     const hls = new Hls({
-                        xhrSetup: function (xhr, url) {
-                            xhr.withCredentials = false; // Bypass basic CORS issues
-                        }
+                        xhrSetup: function(xhr) { xhr.withCredentials = false; }
                     });
                     hls.loadSource(streamUrl);
                     hls.attachMedia(video);
-                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                        video.play();
-                    });
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
                 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    // Native support for Safari/iOS
                     video.src = streamUrl;
                     video.play();
                 }
 
             } catch (err) {
-                console.error(err);
-                loader.innerText = "Server error occurred!";
+                statusText.innerText = "Connection error. Please refresh.";
+                console.error("Playback Error:", err);
             }
         }
 
-        // Start the process
-        initializePlayer();
+        startPlayback();
     </script>
 </body>
 </html>
