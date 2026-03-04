@@ -9,15 +9,18 @@ module.exports = async (req, res) => {
     const { id, title, ott } = req.query;
 
     try {
-        // Step 1: Cookie Bypass
-        const bypassResponse = await axios.post(`${mainUrl}/tv/p.php`, {}, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' },
-            timeout: 5000 
-        });
-        const cookie = bypassResponse.headers['set-cookie']?.join('; ') || '';
+        // Step 1: Bypass for Cookie
+        let cookie = "";
+        try {
+            const bypassRes = await axios.post(`${mainUrl}/tv/p.php`, {}, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' },
+                timeout: 5000
+            });
+            cookie = bypassRes.headers['set-cookie']?.join('; ') || '';
+        } catch (e) { console.log("Bypass failed, continuing..."); }
 
         let hToken = "";
-        // Step 2: Netflix Token Logic
+        // Step 2: Token Logic for Netflix
         if (ott === 'nf') {
             const playPage = await axios.post(`${mainUrl}/play.php`, `id=${id}`, {
                 headers: { 
@@ -26,19 +29,21 @@ module.exports = async (req, res) => {
                     'Referer': `${mainUrl}/` 
                 }
             });
+            
             if (playPage.data && playPage.data.h) {
                 const h_val = playPage.data.h;
                 const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${h_val}`, {
-                    headers: { 'Referer': `${mainUrl}/` }
+                    headers: { 'Referer': `${mainUrl}/`, 'User-Agent': 'Mozilla/5.0' }
                 });
                 const $ = cheerio.load(tokenPage.data);
-                hToken = $('body').attr('data-h');
+                hToken = $('body').attr('data-h'); // Extracting data-h token
             }
         }
 
-        // Step 3: Playlist Path
-        let path = (ott === 'pv') ? '/pv/playlist.php' : 
-                   (ott === 'hs' || ott === 'dp') ? '/mobile/hs/playlist.php' : '/playlist.php';
+        // Step 3: Playlist URL selection
+        let path = '/playlist.php';
+        if (ott === 'pv') path = '/pv/playlist.php';
+        else if (ott === 'hs' || ott === 'dp') path = '/mobile/hs/playlist.php';
 
         const playlistUrl = `${newUrl}${path}?id=${id}&t=${encodeURIComponent(title)}${hToken ? '&h='+hToken : ''}&tm=${Date.now()}`;
 
@@ -50,24 +55,21 @@ module.exports = async (req, res) => {
             }
         });
 
-        if (!response.data || !response.data[0]) {
-             return res.status(404).json({ error: "Playlist data is empty" });
+        // Safe Response Handling
+        if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
+            return res.status(200).json([]); // Return empty array instead of crashing
         }
 
         const sources = response.data[0].sources.map(s => ({
             label: s.label,
-            // Proxy use kar rahe hain taaki segment block na hon
+            // Proxying video segments
             file: `/api/proxy?url=${encodeURIComponent(newUrl + s.file)}`
         }));
 
         res.status(200).json(sources);
 
     } catch (error) {
-        console.error("Backend Error Detail:", error.message);
-        res.status(500).json({ 
-            error: "Server Error", 
-            message: error.message,
-            step: "Failed during link extraction" 
-        });
+        console.error("Links API Error:", error.message);
+        res.status(200).json([]); // Return empty array on error to stop frontend crash
     }
 };
