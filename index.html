@@ -1,221 +1,42 @@
-<!DOCTYPE html>
-<html lang="hi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetMirror Web - Watch Online</title>
+<div class="search-container">
+    <input type="text" id="searchInput" placeholder="Search across Netflix, Prime, Hotstar...">
+    <button onclick="performSearch()">Search All</button>
+</div>
+
+<script>
+async function performSearch() {
+    const query = document.getElementById('searchInput').value;
+    const loader = document.getElementById('loader');
+    const list = document.getElementById('movieList');
     
-    <style>
-        /* Netflix-style Dark Theme */
-        :root { 
-            --red: #e50914; 
-            --black: #0f0f0f; 
-            --card-bg: #1f1f1f; 
-            --text-gray: #b3b3b3;
-        }
+    loader.style.display = 'block';
+    list.innerHTML = '';
 
-        body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            background-color: var(--black); 
-            color: white; 
-            margin: 0; 
-            padding: 20px;
-        }
+    try {
+        // Ab hum type bhej hi nahi rahe, backend khud handle karega
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        
+        loader.style.display = 'none';
 
-        .container { 
-            max-width: 1200px; 
-            margin: 0 auto; 
-            text-align: center; 
-        }
-
-        h1 { 
-            font-size: 2.5rem; 
-            margin-bottom: 30px; 
-            letter-spacing: 1px;
-        }
-
-        .highlight { color: var(--red); }
-
-        /* Search & Filter Section */
-        .search-container { 
-            display: flex; 
-            flex-wrap: wrap; 
-            justify-content: center; 
-            gap: 15px; 
-            margin-bottom: 50px; 
-        }
-
-        select, input { 
-            padding: 14px 20px; 
-            border-radius: 8px; 
-            border: 1px solid #333; 
-            background: #222; 
-            color: white; 
-            font-size: 16px; 
-            outline: none; 
-        }
-
-        input { width: 350px; }
-
-        button { 
-            padding: 14px 40px; 
-            border-radius: 8px; 
-            border: none; 
-            background-color: var(--red); 
-            color: white; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: transform 0.2s, background 0.2s; 
-        }
-
-        button:hover { 
-            background-color: #f40612; 
-            transform: scale(1.05); 
-        }
-
-        /* Results Grid */
-        .movie-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); 
-            gap: 25px; 
-            padding: 10px; 
-        }
-
-        .movie-card { 
-            background: var(--card-bg); 
-            border-radius: 12px; 
-            overflow: hidden; 
-            cursor: pointer; 
-            transition: 0.3s ease; 
-            position: relative;
-            border: 1px solid #2a2a2a;
-        }
-
-        .movie-card:hover { 
-            transform: translateY(-10px); 
-            box-shadow: 0 10px 20px rgba(229, 9, 20, 0.3); 
-            border-color: var(--red);
-        }
-
-        .movie-card img { 
-            width: 100%; 
-            height: 260px; 
-            object-fit: cover; 
-            background: #333;
-        }
-
-        .movie-card .info { 
-            padding: 12px; 
-            font-size: 14px; 
-            font-weight: 500; 
-            height: 40px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .ott-tag {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-            color: var(--red);
-        }
-
-        #loader { 
-            display: none; 
-            margin: 20px; 
-            color: var(--red); 
-            font-weight: bold; 
-            font-size: 1.2rem;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="container">
-        <h1>NetMirror <span class="highlight">Web</span></h1>
-
-        <div class="search-container">
-            <select id="ottSelect">
-                <option value="nf">Netflix Mirror</option>
-                <option value="pv">Prime Video Mirror</option>
-                <option value="hs">Hotstar Mirror</option>
-                <option value="dp">Disney+ Mirror</option>
-            </select>
+        data.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'movie-card';
+            card.innerHTML = `
+                <div class="ott-tag">${item.ott}</div>
+                <img src="${item.image}" alt="${item.title}" onerror="this.src='https://via.placeholder.com/180x260?text=No+Poster'">
+                <div class="info">${item.title}</div>
+            `;
             
-            <input type="text" id="searchInput" placeholder="Movie ya Show ka naam likhein...">
-            <button onclick="performSearch()">Search</button>
-        </div>
-
-        <div id="loader">Dhundh raha hoon... please wait...</div>
-
-        <div class="movie-grid" id="movieList"></div>
-    </div>
-
-    <script>
-        async function performSearch() {
-            const query = document.getElementById('searchInput').value;
-            const ott = document.getElementById('ottSelect').value;
-            
-            if (!query) {
-                alert("Bhai, search karne ke liye kuch toh likho!");
-                return;
-            }
-
-            const loader = document.getElementById('loader');
-            const list = document.getElementById('movieList');
-            
-            loader.style.display = 'block';
-            list.innerHTML = '';
-
-            try {
-                // Backend API call
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${ott}`);
-                const data = await response.json();
-                
-                loader.style.display = 'none';
-
-                if (!data || data.length === 0) {
-                    list.innerHTML = "<p style='grid-column: 1/-1;'>Afsos! Koi result nahi mila.</p>";
-                    return;
-                }
-
-                data.forEach(item => {
-                    const card = document.createElement('div');
-                    card.className = 'movie-card';
-                    card.innerHTML = `
-                        <div class="ott-tag">${ott}</div>
-                        <img src="${item.image}" alt="${item.title}" onerror="this.src='https://via.placeholder.com/180x260?text=No+Poster'">
-                        <div class="info">${item.title}</div>
-                    `;
-                    
-                    // Redirect logic to new page
-                    card.onclick = () => {
-                        const playerUrl = `player.html?id=${item.id}&title=${encodeURIComponent(item.title)}&ott=${ott}`;
-                        window.location.href = playerUrl;
-                    };
-                    
-                    list.appendChild(card);
-                });
-            } catch (err) {
-                loader.style.display = 'none';
-                alert("Server se connect karne mein error aaya!");
-                console.error(err);
-            }
-        }
-
-        // Enter key support for search
-        document.getElementById('searchInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                performSearch();
-            }
+            // Redirect with the OTT type stored in the result
+            card.onclick = () => {
+                window.location.href = `player.html?id=${item.id}&title=${encodeURIComponent(item.title)}&ott=${item.ott}`;
+            };
+            list.appendChild(card);
         });
-    </script>
-</body>
-</html>
+    } catch (err) {
+        loader.style.display = 'none';
+        alert("Search failed!");
+    }
+}
+</script>
