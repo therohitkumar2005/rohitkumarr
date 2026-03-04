@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+
 const mainUrl = "https://net22.cc";
 const newUrl = "https://net52.cc";
 
@@ -8,49 +9,62 @@ module.exports = async (req, res) => {
     const { id, title, ott } = req.query;
 
     try {
-        // Step 1: Bypass for Cookie
+        // 1. Get Bypass Cookie
         const bypassRes = await axios.post(`${mainUrl}/tv/p.php`, {}, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' },
+            timeout: 5000
         });
         const cookie = bypassRes.headers['set-cookie']?.join('; ') || '';
 
         let hToken = "";
-        // Step 2: Netflix Token Logic
+        // 2. Secret Token Logic for Netflix Only
         if (ott === 'nf') {
-            const playRes = await axios.post(`${mainUrl}/play.php`, `id=${id}`, {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookie, 'Referer': `${mainUrl}/` }
-            });
-            if (playRes.data && playRes.data.h) {
-                const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${playRes.data.h}`, {
-                    headers: { 'Referer': `${mainUrl}/` }
+            try {
+                const playReq = await axios.post(`${mainUrl}/play.php`, `id=${id}`, {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookie, 'Referer': `${mainUrl}/` }
                 });
-                const $ = cheerio.load(tokenPage.data);
-                hToken = $('body').attr('data-h'); //
-            }
+                
+                if (playReq.data && playReq.data.h) {
+                    const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${playReq.data.h}`, {
+                        headers: { 'Referer': `${mainUrl}/`, 'User-Agent': 'Mozilla/5.0' }
+                    });
+                    const $ = cheerio.load(tokenPage.data);
+                    hToken = $('body').attr('data-h') || ""; // Extract data-h
+                }
+            } catch (e) { console.error("Netflix Token Error", e.message); }
         }
 
-        // Step 3: Path Selection based on Provider
-        let path = '/playlist.php';
+        // 3. Select Path based on Provider
+        let path = '/playlist.php'; // Default/Netflix
         if (ott === 'pv') path = '/pv/playlist.php'; // Prime
         else if (ott === 'hs' || ott === 'dp') path = '/mobile/hs/playlist.php'; // Hotstar/Disney
 
         const playlistUrl = `${newUrl}${path}?id=${id}&t=${encodeURIComponent(title)}${hToken ? '&h='+hToken : ''}&tm=${Date.now()}`;
 
         const response = await axios.get(playlistUrl, {
-            headers: { 'Referer': `${mainUrl}/`, 'Cookie': 'hd=on', 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
+            headers: { 
+                'Referer': `${mainUrl}/`, 
+                'Cookie': `${cookie}; hd=on`, 
+                'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' 
+            }
         });
 
-        if (!response.data || !response.data[0]) return res.json([]);
+        // 4. Response formatting
+        if (!response.data || !response.data[0]) {
+            return res.status(200).json([]); 
+        }
 
         const sources = response.data[0].sources.map(s => ({
             label: s.label,
-            // Full Proxied link for Manifest Rewriting
+            // Link ko proxy ke raste bhej rahe hain
             file: `/api/proxy?url=${encodeURIComponent(newUrl + s.file)}`
         }));
 
         res.status(200).json(sources);
-    } catch (e) {
-        console.error(e.message);
-        res.status(500).json({ error: "Backend Crash", details: e.message });
+
+    } catch (error) {
+        console.error("Backend Error:", error.message);
+        // Crash hone ke bajaye empty array bhej rahe hain taaki frontend handle kar sake
+        res.status(200).json([]); 
     }
 };
