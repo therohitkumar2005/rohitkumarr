@@ -1,62 +1,57 @@
-// api/search.js
 const axios = require('axios');
-const cheerio = require('cheerio');
+
+const mainUrl = "https://net22.cc";
+
+async function getBypassCookie() {
+    try {
+        // Kotlin logic: POST to /tv/p.php until it gives "r":"n"
+        const response = await axios.post(`${mainUrl}/tv/p.php`, {}, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
+        });
+        
+        // Axios automatically manages cookies, but we need the specific 't_hash_t'
+        const cookieHeader = response.headers['set-cookie'];
+        return cookieHeader ? cookieHeader.map(c => c.split(';')[0]).join('; ') : '';
+    } catch (e) {
+        console.error("Bypass failed", e.message);
+        return "";
+    }
+}
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const { q } = req.query;
+    if (!q) return res.status(400).json({ error: "Query missing" });
 
-    if (!q) return res.status(400).json({ error: "Kuch toh search karein" });
-
-    // Naya Domain
-    const baseUrl = 'https://net22.cc';
-    // Net22 aksar is format mein search leta hai
-    const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
+    const cookie = await getBypassCookie();
+    const unixTime = Date.now();
+    
+    // Kotlin Search API URL
+    const searchUrl = `${mainUrl}/search.php?s=${encodeURIComponent(q)}&t=${unixTime}`;
 
     try {
         const response = await axios.get(searchUrl, {
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Referer': baseUrl,
-                'Accept-Language': 'en-US,en;q=0.9'
-            },
-            timeout: 10000 
-        });
-
-        const $ = cheerio.load(response.data);
-        const results = [];
-
-        // Net22/NetMirror ke naye structure ke liye links dhundna
-        $('a').each((i, el) => {
-            const href = $(el).attr('href');
-            const title = $(el).find('.title').text().trim() || $(el).text().trim();
-            const img = $(el).find('img').attr('src');
-            
-            // Ye check karta hai ki link movie ya video ka hi ho
-            if (href && (href.includes('/v/') || href.includes('/movie/') || href.includes('/watch/'))) {
-                results.push({
-                    title: title || "Watch Video",
-                    link: href.startsWith('http') ? href : baseUrl + href,
-                    image: img ? (img.startsWith('http') ? img : baseUrl + img) : 'https://via.placeholder.com/150'
-                });
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': `${mainUrl}/home`,
+                'Cookie': `${cookie}; hd=on; ott=nf`, // ott=nf means Netflix Mirror
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
-        // Agar array khali hai toh debug info dein
-        if (results.length === 0) {
-            return res.status(200).json({ 
-                msg: "Koi result nahi mila.", 
-                debug_url: searchUrl,
-                tip: "Browser mein search karke dekhein kya URL wahi hai?" 
-            });
-        }
+        // Addon logic to format search results
+        const data = response.data;
+        if (!data || !data.searchResult) return res.json([]);
 
-        return res.status(200).json(results);
+        const results = data.searchResult.map(item => ({
+            title: item.t,
+            id: item.id,
+            image: `https://imgcdn.kim/poster/v/${item.id}.jpg`, // Kotlin image logic
+            link: item.id // Hum sirf ID bhejenge video nikalne ke liye
+        }));
 
+        res.status(200).json(results);
     } catch (error) {
-        return res.status(500).json({ 
-            error: "Net22 site block hai ya down hai", 
-            details: error.message 
-        });
+        res.status(500).json({ error: "API Error", details: error.message });
     }
 };
