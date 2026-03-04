@@ -6,55 +6,57 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const { q } = req.query;
 
-    if (!q) return res.status(400).json({ error: "Kuch search karein" });
+    if (!q) return res.status(400).json({ error: "Kuch toh search karein" });
 
-    // Hum 2-3 alag tareeke try karenge kyunki 404 aa raha hai
-    const baseUrl = 'https://netmirror.gg';
-    const searchUrl = `${baseUrl}/search.php?q=${encodeURIComponent(q)}`; // Kuch sites search.php use karti hain
-    const fallbackUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
+    // Naya Domain
+    const baseUrl = 'https://net22.cc';
+    // Net22 aksar is format mein search leta hai
+    const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
 
     try {
-        // Pehle search.php try karte hain, agar wo na chale toh fallback
-        let response;
-        try {
-            response = await axios.get(searchUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-        } catch (e) {
-            response = await axios.get(fallbackUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-        }
+        const response = await axios.get(searchUrl, {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': baseUrl,
+                'Accept-Language': 'en-US,en;q=0.9'
+            },
+            timeout: 10000 
+        });
 
         const $ = cheerio.load(response.data);
         const results = [];
 
-        // NetMirror.gg ke liye naya selector
+        // Net22/NetMirror ke naye structure ke liye links dhundna
         $('a').each((i, el) => {
             const href = $(el).attr('href');
-            const title = $(el).text().trim();
+            const title = $(el).find('.title').text().trim() || $(el).text().trim();
+            const img = $(el).find('img').attr('src');
             
-            // Sirf wahi links lein jo movies ya videos ke hon
+            // Ye check karta hai ki link movie ya video ka hi ho
             if (href && (href.includes('/v/') || href.includes('/movie/') || href.includes('/watch/'))) {
                 results.push({
-                    title: title || "Watch Now",
+                    title: title || "Watch Video",
                     link: href.startsWith('http') ? href : baseUrl + href,
-                    image: $(el).find('img').attr('src') || 'https://via.placeholder.com/150'
+                    image: img ? (img.startsWith('http') ? img : baseUrl + img) : 'https://via.placeholder.com/150'
                 });
             }
         });
 
+        // Agar array khali hai toh debug info dein
         if (results.length === 0) {
-            return res.status(200).json({ msg: "Koi result nahi mila, par site chal rahi hai." });
+            return res.status(200).json({ 
+                msg: "Koi result nahi mila.", 
+                debug_url: searchUrl,
+                tip: "Browser mein search karke dekhein kya URL wahi hai?" 
+            });
         }
 
         return res.status(200).json(results);
 
     } catch (error) {
         return res.status(500).json({ 
-            error: "NetMirror link galat hai ya site block hai", 
-            tried_url: searchUrl,
-            status: error.response ? error.response.status : "No Response"
+            error: "Net22 site block hai ya down hai", 
+            details: error.message 
         });
     }
 };
