@@ -1,42 +1,164 @@
-<div class="search-container">
-    <input type="text" id="searchInput" placeholder="Search across Netflix, Prime, Hotstar...">
-    <button onclick="performSearch()">Search All</button>
-</div>
-
-<script>
-async function performSearch() {
-    const query = document.getElementById('searchInput').value;
-    const loader = document.getElementById('loader');
-    const list = document.getElementById('movieList');
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetMirror Global - Search All</title>
     
-    loader.style.display = 'block';
-    list.innerHTML = '';
+    <style>
+        :root { 
+            --red: #e50914; 
+            --black: #0b0b0b; 
+            --card-bg: #181818; 
+        }
 
-    try {
-        // Ab hum type bhej hi nahi rahe, backend khud handle karega
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
+        body { 
+            font-family: 'Segoe UI', Tahoma, sans-serif; 
+            background: var(--black); 
+            color: white; 
+            margin: 0; 
+            padding: 20px; 
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; text-align: center; }
         
-        loader.style.display = 'none';
+        /* Search Box Styling */
+        .search-area { margin: 40px 0; }
+        .search-wrapper { display: flex; justify-content: center; gap: 10px; }
+        input { 
+            padding: 15px 25px; 
+            width: 400px; 
+            border-radius: 30px; 
+            border: 1px solid #333; 
+            background: #222; 
+            color: white; 
+            font-size: 16px;
+            outline: none;
+        }
+        input:focus { border-color: var(--red); }
+        button { 
+            padding: 15px 35px; 
+            border-radius: 30px; 
+            border: none; 
+            background: var(--red); 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { transform: scale(1.05); background: #f40612; }
 
-        data.forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'movie-card';
-            card.innerHTML = `
-                <div class="ott-tag">${item.ott}</div>
-                <img src="${item.image}" alt="${item.title}" onerror="this.src='https://via.placeholder.com/180x260?text=No+Poster'">
-                <div class="info">${item.title}</div>
-            `;
+        /* Grid for Results */
+        .movie-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); 
+            gap: 25px; 
+            margin-top: 20px; 
+        }
+
+        .card { 
+            background: var(--card-bg); 
+            border-radius: 12px; 
+            overflow: hidden; 
+            cursor: pointer; 
+            transition: 0.3s; 
+            position: relative;
+            border: 1px solid #222;
+        }
+        .card:hover { transform: translateY(-8px); border-color: var(--red); }
+        .card img { width: 100%; height: 250px; object-fit: cover; }
+        
+        .card-info { padding: 12px; text-align: left; }
+        .movie-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* OTT Tags Styling */
+        .ott-tag { 
+            position: absolute; top: 10px; left: 10px; 
+            padding: 3px 8px; border-radius: 4px; 
+            font-size: 10px; font-weight: bold; color: white;
+            text-transform: uppercase;
+        }
+        .tag-nf { background: #e50914; } /* Netflix */
+        .tag-pv { background: #00a8e1; } /* Prime */
+        .tag-hs { background: #ffcc00; color: black; } /* Hotstar */
+        .tag-dp { background: #003399; } /* Disney+ */
+
+        #loader { display: none; margin: 20px; font-size: 18px; color: var(--red); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 style="font-size: 3rem; margin-bottom: 10px;">Net<span style="color: var(--red);">Mirror</span></h1>
+        <p style="color: #888;">Search across all platforms in one click</p>
+
+        <div class="search-area">
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="Search movies, series, anime...">
+                <button onclick="globalSearch()">Search All</button>
+            </div>
+        </div>
+
+        <div id="loader">Processing Global Search... Please wait.</div>
+        <div class="movie-grid" id="movieResults"></div>
+    </div>
+
+    <script>
+        async function globalSearch() {
+            const query = document.getElementById('searchInput').value;
+            if (!query) return;
+
+            const loader = document.getElementById('loader');
+            const grid = document.getElementById('movieResults');
             
-            // Redirect with the OTT type stored in the result
-            card.onclick = () => {
-                window.location.href = `player.html?id=${item.id}&title=${encodeURIComponent(item.title)}&ott=${item.ott}`;
-            };
-            list.appendChild(card);
+            loader.style.display = 'block';
+            grid.innerHTML = '';
+
+            try {
+                // Backend API call
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                
+                loader.style.display = 'none';
+
+                if (!results || results.length === 0) {
+                    grid.innerHTML = "<p style='grid-column: 1/-1;'>No results found. Try a different name.</p>";
+                    return;
+                }
+
+                results.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    
+                    // Platform tag based on OTT type
+                    const tagClass = `tag-${item.ott}`;
+                    
+                    card.innerHTML = `
+                        <div class="ott-tag ${tagClass}">${item.ott}</div>
+                        <img src="${item.image}" alt="${item.title}" onerror="this.src='https://via.placeholder.com/170x250?text=No+Poster'">
+                        <div class="card-info">
+                            <div class="movie-name">${item.title}</div>
+                        </div>
+                    `;
+                    
+                    // Redirect logic to player.html
+                    card.onclick = () => {
+                        window.location.href = `player.html?id=${item.id}&title=${encodeURIComponent(item.title)}&ott=${item.ott}`;
+                    };
+                    
+                    grid.appendChild(card);
+                });
+            } catch (err) {
+                loader.style.display = 'none';
+                alert("Backend connection error!");
+                console.error(err);
+            }
+        }
+
+        // Search on Enter key
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') globalSearch();
         });
-    } catch (err) {
-        loader.style.display = 'none';
-        alert("Search failed!");
-    }
-}
-</script>
+    </script>
+</body>
+</html>
