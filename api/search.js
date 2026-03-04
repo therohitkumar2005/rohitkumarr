@@ -1,44 +1,57 @@
+// api/search.js
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
+    // CORS headers taaki browser block na kare
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
     const { q } = req.query;
-    // Naya URL yahan hai
+    if (!q) {
+        return res.status(400).json({ error: "Search query missing" });
+    }
+
     const baseUrl = 'https://netmirror.gg';
+    // User ne jo URL diya tha uske hisaab se path:
     const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
 
     try {
         const response = await axios.get(searchUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': baseUrl
-            }
+                'Accept-Language': 'en-US,en;q=0.9'
+            },
+            timeout: 8000 // 8 seconds ke baad band ho jaye agar site slow ho
         });
 
         const $ = cheerio.load(response.data);
         const results = [];
 
-        // NetMirror.gg ke naye design ke hisaab se links nikaalna
+        // Naya logic: NetMirror.gg ke thumbnails aur links dhundna
         $('a').each((i, el) => {
             const href = $(el).attr('href');
             const title = $(el).text().trim();
+            const img = $(el).find('img').attr('src');
             
-            // Hum sirf movies ya series ke links uthayenge
             if (href && (href.includes('/v/') || href.includes('/movie/'))) {
                 results.push({
-                    title: title || "Movie",
+                    title: title || "Movie/Show",
                     link: href.startsWith('http') ? href : baseUrl + href,
-                    // Yahan poster image nikalne ki koshish (optional)
-                    image: $(el).find('img').attr('src') || 'https://via.placeholder.com/150'
+                    image: img ? (img.startsWith('http') ? img : baseUrl + img) : 'https://via.placeholder.com/150'
                 });
             }
         });
 
-        // Duplicate results hatane ke liye
-        const uniqueResults = results.filter((v,i,a)=>a.findIndex(t=>(t.link === v.link))===i);
+        // Duplicate links hatana
+        const finalData = results.filter((v,i,a)=>a.findIndex(t=>(t.link===v.link))===i);
 
-        res.status(200).json(uniqueResults);
+        return res.status(200).json(finalData);
+
     } catch (error) {
-        res.status(500).json({ error: "Data fetch nahi ho paya", details: error.message });
+        console.error("Backend Error:", error.message);
+        return res.status(500).json({ 
+            error: "NetMirror site ne respond nahi kiya", 
+            details: error.message 
+        });
     }
-}
+};
