@@ -3,55 +3,58 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
-    // CORS headers taaki browser block na kare
     res.setHeader('Access-Control-Allow-Origin', '*');
-    
     const { q } = req.query;
-    if (!q) {
-        return res.status(400).json({ error: "Search query missing" });
-    }
 
+    if (!q) return res.status(400).json({ error: "Kuch search karein" });
+
+    // Hum 2-3 alag tareeke try karenge kyunki 404 aa raha hai
     const baseUrl = 'https://netmirror.gg';
-    // User ne jo URL diya tha uske hisaab se path:
-    const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
+    const searchUrl = `${baseUrl}/search.php?q=${encodeURIComponent(q)}`; // Kuch sites search.php use karti hain
+    const fallbackUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}`;
 
     try {
-        const response = await axios.get(searchUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
-            },
-            timeout: 8000 // 8 seconds ke baad band ho jaye agar site slow ho
-        });
+        // Pehle search.php try karte hain, agar wo na chale toh fallback
+        let response;
+        try {
+            response = await axios.get(searchUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+        } catch (e) {
+            response = await axios.get(fallbackUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+        }
 
         const $ = cheerio.load(response.data);
         const results = [];
 
-        // Naya logic: NetMirror.gg ke thumbnails aur links dhundna
+        // NetMirror.gg ke liye naya selector
         $('a').each((i, el) => {
             const href = $(el).attr('href');
             const title = $(el).text().trim();
-            const img = $(el).find('img').attr('src');
             
-            if (href && (href.includes('/v/') || href.includes('/movie/'))) {
+            // Sirf wahi links lein jo movies ya videos ke hon
+            if (href && (href.includes('/v/') || href.includes('/movie/') || href.includes('/watch/'))) {
                 results.push({
-                    title: title || "Movie/Show",
+                    title: title || "Watch Now",
                     link: href.startsWith('http') ? href : baseUrl + href,
-                    image: img ? (img.startsWith('http') ? img : baseUrl + img) : 'https://via.placeholder.com/150'
+                    image: $(el).find('img').attr('src') || 'https://via.placeholder.com/150'
                 });
             }
         });
 
-        // Duplicate links hatana
-        const finalData = results.filter((v,i,a)=>a.findIndex(t=>(t.link===v.link))===i);
+        if (results.length === 0) {
+            return res.status(200).json({ msg: "Koi result nahi mila, par site chal rahi hai." });
+        }
 
-        return res.status(200).json(finalData);
+        return res.status(200).json(results);
 
     } catch (error) {
-        console.error("Backend Error:", error.message);
         return res.status(500).json({ 
-            error: "NetMirror site ne respond nahi kiya", 
-            details: error.message 
+            error: "NetMirror link galat hai ya site block hai", 
+            tried_url: searchUrl,
+            status: error.response ? error.response.status : "No Response"
         });
     }
 };
