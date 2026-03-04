@@ -8,10 +8,14 @@ module.exports = async (req, res) => {
         const response = await axios.get(url, {
             headers: {
                 'Referer': 'https://net52.cc/',
-                'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer'
+                'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer',
+                'Cookie': 'hd=on'
             },
             responseType: 'stream'
         });
+
+        // Browser ko batana ki ye ek video stream hai
+        res.setHeader('Content-Type', response.headers['content-type'] || 'application/vnd.apple.mpegurl');
         response.data.pipe(res);
     } catch (e) {
         res.status(500).send("Proxy Error");
