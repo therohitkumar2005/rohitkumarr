@@ -8,36 +8,46 @@ module.exports = async (req, res) => {
     const { id, title, ott } = req.query;
 
     try {
-        let token = "";
-        // Only Netflix needs the complex token logic
+        // Step 1: Bypass and Get Cookies
+        const bypassReq = await axios.post(`${mainUrl}/tv/p.php`, {}, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
+        });
+        const cookie = bypassReq.headers['set-cookie']?.join('; ') || '';
+
+        let hToken = "";
+        // Step 2: Get Token for Netflix only
         if (ott === 'nf') {
             const playPage = await axios.post(`${mainUrl}/play.php`, `id=${id}`, {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': `${mainUrl}/` }
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookie, 'Referer': `${mainUrl}/` }
             });
             const h_val = playPage.data.h;
             const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${h_val}`, {
-                headers: { 'Referer': `${mainUrl}/` }
+                headers: { 'Referer': `${mainUrl}/`, 'User-Agent': 'Mozilla/5.0' }
             });
             const $ = cheerio.load(tokenPage.data);
-            token = $('body').attr('data-h');
+            hToken = $('body').attr('data-h');
         }
 
-        // Determine playlist path
-        const path = (ott === 'pv') ? '/pv/playlist.php' : (ott === 'hs' || ott === 'dp') ? '/mobile/hs/playlist.php' : '/playlist.php';
-        const playlistUrl = `${newUrl}${path}?id=${id}&t=${encodeURIComponent(title)}${token ? '&h='+token : ''}&tm=${Date.now()}`;
+        // Step 3: Choose Playlist Path
+        let path = '/playlist.php';
+        if (ott === 'pv') path = '/pv/playlist.php';
+        else if (ott === 'hs' || ott === 'dp') path = '/mobile/hs/playlist.php';
+
+        const playlistUrl = `${newUrl}${path}?id=${id}&t=${encodeURIComponent(title)}${hToken ? '&h='+hToken : ''}&tm=${Date.now()}`;
 
         const response = await axios.get(playlistUrl, {
-            headers: { 'Referer': `${mainUrl}/`, 'Cookie': 'hd=on', 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
+            headers: { 'Referer': `${mainUrl}/`, 'Cookie': `${cookie}; hd=on`, 'User-Agent': 'Mozilla/5.0 (Android) ExoPlayer' }
         });
 
+        // Step 4: Final Link with Proxy
         const sources = response.data[0].sources.map(s => ({
             label: s.label,
-            // Proxy use kar rahe hain taaki video chale
+            // Hum link ko proxy ke raste bhejenge taaki headers bypass ho sakein
             file: `/api/proxy?url=${encodeURIComponent(newUrl + s.file)}`
         }));
 
         res.status(200).json(sources);
     } catch (error) {
-        res.status(500).json({ error: "Links not found" });
+        res.status(500).json({ error: "Links fetch fail ho gaye" });
     }
 };
