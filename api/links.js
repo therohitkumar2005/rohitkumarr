@@ -15,21 +15,25 @@ module.exports = async (req, res) => {
         const cookie = bypassRes.headers['set-cookie']?.join('; ') || '';
 
         let hToken = "";
-        // Step 2: Netflix Specific Token
+        // Step 2: Netflix Token Logic
         if (ott === 'nf') {
             const playRes = await axios.post(`${mainUrl}/play.php`, `id=${id}`, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookie, 'Referer': `${mainUrl}/` }
             });
-            const h_val = playRes.data.h;
-            const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${h_val}`, {
-                headers: { 'Referer': `${mainUrl}/` }
-            });
-            const $ = cheerio.load(tokenPage.data);
-            hToken = $('body').attr('data-h');
+            if (playRes.data && playRes.data.h) {
+                const tokenPage = await axios.get(`${newUrl}/play.php?id=${id}&${playRes.data.h}`, {
+                    headers: { 'Referer': `${mainUrl}/` }
+                });
+                const $ = cheerio.load(tokenPage.data);
+                hToken = $('body').attr('data-h'); //
+            }
         }
 
-        // Step 3: Playlist Path Selection
-        const path = (ott === 'pv') ? '/pv/playlist.php' : (ott === 'hs' || ott === 'dp') ? '/mobile/hs/playlist.php' : '/playlist.php';
+        // Step 3: Path Selection based on Provider
+        let path = '/playlist.php';
+        if (ott === 'pv') path = '/pv/playlist.php'; // Prime
+        else if (ott === 'hs' || ott === 'dp') path = '/mobile/hs/playlist.php'; // Hotstar/Disney
+
         const playlistUrl = `${newUrl}${path}?id=${id}&t=${encodeURIComponent(title)}${hToken ? '&h='+hToken : ''}&tm=${Date.now()}`;
 
         const response = await axios.get(playlistUrl, {
@@ -40,12 +44,13 @@ module.exports = async (req, res) => {
 
         const sources = response.data[0].sources.map(s => ({
             label: s.label,
-            // Proxied link for rewriting
+            // Full Proxied link for Manifest Rewriting
             file: `/api/proxy?url=${encodeURIComponent(newUrl + s.file)}`
         }));
 
         res.status(200).json(sources);
     } catch (e) {
-        res.status(200).json([]); 
+        console.error(e.message);
+        res.status(500).json({ error: "Backend Crash", details: e.message });
     }
 };
