@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My NetMirror Web</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: white; text-align: center; }
+        input { padding: 10px; width: 60%; border-radius: 5px; }
+        .results { display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+        .card { margin: 10px; width: 150px; cursor: pointer; }
+        .card img { width: 100%; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <h1>NetMirror Web Player</h1>
+    <input type="text" id="query" placeholder="Movie ka naam likhein...">
+    <button onclick="searchMovies()">Search</button>
+
+    <div class="results" id="output"></div>
+
+    <script>
+        async function searchMovies() {
+            const q = document.getElementById('query').value;
+            const res = await fetch(`/api/search?q=${q}`);
+            const data = await res.json();
+            
+            let html = '';
+            data.forEach(movie => {
+                html += `
+                    <div class="card">
+                        <img src="${movie.image}">
+                        <p>${movie.title}</p>
+                    </div>`;
+            });
+            document.getElementById('output').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
