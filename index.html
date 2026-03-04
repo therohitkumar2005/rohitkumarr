@@ -1,69 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetMirror Web</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: white; margin: 0; padding: 20px; text-align: center; }
-        .search-box { margin-bottom: 30px; }
-        input { padding: 12px; width: 280px; border-radius: 25px; border: none; outline: none; }
-        button { padding: 12px 25px; border-radius: 25px; border: none; background: #e50914; color: white; cursor: pointer; font-weight: bold; }
-        .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; padding: 10px; }
-        .card { background: #1f1f1f; border-radius: 10px; overflow: hidden; transition: 0.3s; padding-bottom: 10px; }
-        .card:hover { transform: scale(1.05); }
-        .card img { width: 100%; height: 200px; object-fit: cover; }
-        .card p { font-size: 14px; padding: 5px; margin: 0; height: 40px; overflow: hidden; }
-        a { text-decoration: none; color: white; }
-    </style>
-</head>
-<body>
+<div id="player-container" style="display:none; margin-top:20px;">
+    <video id="player" playsinline controls style="width:100%; max-width:800px; margin:0 auto;"></video>
+</div>
 
-    <h1>NetMirror <span style="color: #e50914;">Web</span></h1>
-    
-    <div class="search-box">
-        <input type="text" id="query" placeholder="Movie ya Show ka naam...">
-        <button onclick="searchMovies()">Dhundho</button>
-    </div>
+<script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+<link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
 
-    <div id="loading" style="display:none;">Dhundh raha hoon... thoda rukiye...</div>
-    <div class="results" id="output"></div>
+<script>
+    const player = new Plyr('#player');
 
-    <script>
-        async function searchMovies() {
-            const q = document.getElementById('query').value;
-            if(!q) return alert("Kuch toh likho!");
-
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('output').innerHTML = '';
-
-            try {
-                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-                const data = await res.json();
-                
-                document.getElementById('loading').style.display = 'none';
-
-                if(data.length === 0) {
-                    document.getElementById('output').innerHTML = "<p>Kuch nahi mila. Shayad spelling galat hai?</p>";
-                    return;
-                }
-
-                data.forEach(movie => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.innerHTML = `
-                        <a href="${movie.link}" target="_blank">
-                            <img src="${movie.image}" alt="Poster">
-                            <p>${movie.title}</p>
-                        </a>
-                    `;
-                    document.getElementById('output').appendChild(card);
-                });
-            } catch (err) {
-                alert("Error aa gaya! Console check karein.");
-                document.getElementById('loading').style.display = 'none';
+    async function playMovie(id, title) {
+        const res = await fetch(`/api/links?id=${id}&title=${title}`);
+        const sources = await res.json();
+        
+        if(sources.length > 0) {
+            document.getElementById('player-container').style.display = 'block';
+            const videoLink = sources[0].file;
+            
+            // HLS (m3u8) play karne ke liye
+            if (videoLink.includes('.m3u8')) {
+                alert("M3U8 link mila! Browser mein play karne ke liye HLS.js chahiye.");
+                // Filhaal direct link console mein print kar rahe hain
+                console.log("Video Link:", videoLink);
             }
         }
-    </script>
-</body>
-</html>
+    }
+</script>
